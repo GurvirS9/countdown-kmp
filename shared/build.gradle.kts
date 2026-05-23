@@ -19,6 +19,15 @@ sqldelight {
     linkSqlite.set(false)
 }
 
+// SQLDelight 2.0.2 has no wasmJs or js NPM artifact.
+// Exclude it from all configurations that are used for NPM/WASM dependency resolution
+// so Gradle does not try to resolve a non-existent wasmJs variant.
+configurations.all {
+    if (name.contains("wasmJs", ignoreCase = true) || name.contains("NpmAggregated", ignoreCase = true)) {
+        exclude(group = "app.cash.sqldelight")
+    }
+}
+
 kotlin {
     listOf(
         iosArm64(),
@@ -58,6 +67,12 @@ kotlin {
         androidMain.get().dependsOn(nonWebMain)
         iosMain.get().dependsOn(nonWebMain)
         jvmMain.get().dependsOn(nonWebMain)
+
+        // Explicitly wire iOS targets since default hierarchy template is disabled
+        val iosArm64Main by getting
+        val iosSimulatorArm64Main by getting
+        iosArm64Main.dependsOn(iosMain.get())
+        iosSimulatorArm64Main.dependsOn(iosMain.get())
 
         commonMain.dependencies {
             implementation(libs.compose.runtime)

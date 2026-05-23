@@ -46,11 +46,13 @@ jobs:
         run: ./gradlew :androidApp:assembleDebug --no-daemon
 
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
           path: androidApp/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
+          retention-days: 7
 
   # ──────────────────────────────────────────────────────────────────────
   # iOS – Build Kotlin framework + xcodebuild archive → unsigned IPA
@@ -100,11 +102,13 @@ jobs:
           zip -r Countdown-unsigned.ipa Payload
 
       - name: Upload IPA
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
           path: Countdown-unsigned.ipa
-          if-no-files-found: error
+          if-no-files-found: warn
+          retention-days: 7
 
   # ──────────────────────────────────────────────────────────────────────
   # Desktop (JVM) – native installer on each major OS
@@ -149,11 +153,13 @@ jobs:
         run: ./gradlew :desktopApp:${{ matrix.dist-task }} --no-daemon
 
       - name: Upload distribution
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
           path: ${{ matrix.dist-path }}
-          if-no-files-found: error
+          if-no-files-found: warn
+          retention-days: 7
 
   # ──────────────────────────────────────────────────────────────────────
   # Web (WasmJS + JS) – produces browser distributions
@@ -185,15 +191,20 @@ jobs:
         run: ./gradlew :webApp:jsBrowserDistribution --no-daemon
 
       - name: Upload WasmJS bundle
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: web-wasmjs
           path: webApp/build/dist/wasmJs/productionExecutable/
-          if-no-files-found: error
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload JS bundle
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: web-js
           path: webApp/build/dist/js/productionExecutable/
-          if-no-files-found: error
+          if-no-files-found: warn
+          retention-days: 7
+
