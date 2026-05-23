@@ -1,0 +1,191 @@
+name: Build All Platforms
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Cancel in-progress runs on the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs="-Xmx4g"
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────
+  # Android – assembleDebug → APK
+  # ──────────────────────────────────────────────────────────────────────
+  android:
+    name: 🤖 Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android APK
+        run: ./gradlew :androidApp:assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: androidApp/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # iOS – Build Kotlin framework + xcodebuild archive → unsigned IPA
+  # ──────────────────────────────────────────────────────────────────────
+  ios:
+    name: 🍎 iOS
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Kotlin Shared framework for iOS
+        run: >
+          ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-daemon
+
+      - name: Archive iOS app (unsigned)
+        working-directory: iosApp
+        run: |
+          xcodebuild \
+            -project iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            archive \
+            -archivePath "${{ runner.temp }}/Countdown.xcarchive" \
+            OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES
+
+      - name: Create unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -r "${{ runner.temp }}/Countdown.xcarchive/Products/Applications/"*.app Payload/
+          zip -r Countdown-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: Countdown-unsigned.ipa
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Desktop (JVM) – packageUberJarForCurrentOS on each major OS
+  # ──────────────────────────────────────────────────────────────────────
+  desktop:
+    name: 🖥️ Desktop (${{ matrix.os-label }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            os-label: Linux
+            artifact-name: desktop-linux
+            dist-task: packageDeb         # produces .deb
+            dist-path: desktopApp/build/compose/binaries/main/deb/*.deb
+          - os: macos-latest
+            os-label: macOS
+            artifact-name: desktop-macos
+            dist-task: packageDmg         # produces .dmg
+            dist-path: desktopApp/build/compose/binaries/main/dmg/*.dmg
+          - os: windows-latest
+            os-label: Windows
+            artifact-name: desktop-windows
+            dist-task: packageMsi         # produces .msi
+            dist-path: desktopApp/build/compose/binaries/main/msi/*.msi
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Desktop distribution
+        run: ./gradlew :desktopApp:${{ matrix.dist-task }} --no-daemon
+
+      - name: Upload distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.dist-path }}
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Web (WasmJS + JS) – produces browser distributions
+  # ──────────────────────────────────────────────────────────────────────
+  web:
+    name: 🌐 Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build WasmJS browser distribution
+        run: ./gradlew :webApp:wasmJsBrowserDistribution --no-daemon
+
+      - name: Build JS browser distribution
+        run: ./gradlew :webApp:jsBrowserDistribution --no-daemon
+
+      - name: Upload WasmJS bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-wasmjs
+          path: webApp/build/dist/wasmJs/productionExecutable/
+          if-no-files-found: error
+
+      - name: Upload JS bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-js
+          path: webApp/build/dist/js/productionExecutable/
+          if-no-files-found: error
