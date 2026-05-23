@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  JAVA_VERSION: '17'
+  # Must be 21 — gradle/gradle-daemon-jvm.properties pins toolchainVersion=21
+  JAVA_VERSION: '21'
   JAVA_DISTRIBUTION: 'temurin'
   GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs="-Xmx4g"
 
@@ -28,6 +29,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
 
       - name: Setup JDK
         uses: actions/setup-java@v4
@@ -59,6 +63,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
@@ -69,8 +76,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build Kotlin Shared framework for iOS
-        run: >
-          ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-daemon
+        run: ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-daemon
 
       - name: Archive iOS app (unsigned)
         working-directory: iosApp
@@ -101,7 +107,7 @@ jobs:
           if-no-files-found: error
 
   # ──────────────────────────────────────────────────────────────────────
-  # Desktop (JVM) – packageUberJarForCurrentOS on each major OS
+  # Desktop (JVM) – native installer on each major OS
   # ──────────────────────────────────────────────────────────────────────
   desktop:
     name: 🖥️ Desktop (${{ matrix.os-label }})
@@ -115,21 +121,25 @@ jobs:
           - os: ubuntu-latest
             os-label: Linux
             artifact-name: desktop-linux
-            dist-task: packageDeb         # produces .deb
+            dist-task: packageDeb
             dist-path: desktopApp/build/compose/binaries/main/deb/*.deb
           - os: macos-latest
             os-label: macOS
             artifact-name: desktop-macos
-            dist-task: packageDmg         # produces .dmg
+            dist-task: packageDmg
             dist-path: desktopApp/build/compose/binaries/main/dmg/*.dmg
           - os: windows-latest
             os-label: Windows
             artifact-name: desktop-windows
-            dist-task: packageMsi         # produces .msi
+            dist-task: packageMsi
             dist-path: desktopApp/build/compose/binaries/main/msi/*.msi
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Make gradlew executable
+        if: runner.os != 'Windows'
+        run: chmod +x gradlew
 
       - name: Setup JDK
         uses: actions/setup-java@v4
@@ -160,6 +170,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
 
       - name: Setup JDK
         uses: actions/setup-java@v4
