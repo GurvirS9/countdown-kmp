@@ -48,6 +48,17 @@ kotlin {
     }
 
     sourceSets {
+        // Intermediate source set shared by all non-web targets (android, ios, jvm).
+        // SQLDelight 2.0.2 does not publish a wasmJs/js artifact, so we must keep it
+        // out of commonMain (which includes wasmJs and js).
+        val nonWebMain by creating {
+            dependsOn(commonMain.get())
+        }
+
+        androidMain.get().dependsOn(nonWebMain)
+        iosMain.get().dependsOn(nonWebMain)
+        jvmMain.get().dependsOn(nonWebMain)
+
         commonMain.dependencies {
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
@@ -63,7 +74,10 @@ kotlin {
             implementation(libs.koin.core)
             implementation(libs.koin.compose)
             implementation(libs.koin.compose.viewmodel)
-            // SQLDelight runtime (used by SqlDelightExamRepository in commonMain)
+        }
+
+        nonWebMain.dependencies {
+            // SQLDelight runtime + coroutines: Android, iOS, JVM only
             implementation(libs.sqldelight.runtime)
             implementation(libs.sqldelight.coroutines)
         }

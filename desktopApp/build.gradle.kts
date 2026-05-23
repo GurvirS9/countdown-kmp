@@ -13,6 +13,10 @@ dependencies {
     implementation(libs.kotlinx.coroutinesSwing)
 
     implementation(libs.compose.uiToolingPreview)
+
+    // Koin for desktop DI (startKoin is called in main.kt)
+    implementation(libs.koin.core)
+    implementation(libs.koin.compose)
 }
 
 compose.desktop {
