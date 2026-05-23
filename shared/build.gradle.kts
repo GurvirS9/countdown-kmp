@@ -10,14 +10,7 @@ plugins {
     alias(libs.plugins.sqldelight)
 }
 
-sqldelight {
-    databases {
-        create("ExamDatabase") {
-            packageName.set("com.exam.countdown.database")
-        }
-    }
-    linkSqlite.set(false)
-}
+
 
 // SQLDelight 2.0.2 has no wasmJs or js NPM artifact.
 // Exclude it from all configurations that are used for NPM/WASM dependency resolution
@@ -138,4 +131,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+}
+
+sqldelight {
+    databases {
+        create("ExamDatabase") {
+            packageName.set("com.exam.countdown.database")
+        }
+    }
+    linkSqlite.set(false)
 }
