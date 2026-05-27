@@ -19,9 +19,18 @@ kotlin {
     }
 
     sourceSets {
+        val webMain by creating {
+            dependsOn(commonMain.get())
+        }
+        val jsMain by getting {
+            dependsOn(webMain)
+        }
+        val wasmJsMain by getting {
+            dependsOn(webMain)
+        }
+
         commonMain.dependencies {
             implementation(projects.shared)
-
             implementation(libs.compose.ui)
         }
     }
