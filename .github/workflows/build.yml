@@ -91,10 +91,6 @@ jobs:
           key: ${{ runner.os }}-konan-${{ hashFiles('**/libs.versions.toml') }}
           restore-keys: ${{ runner.os }}-konan-
 
-      # Build the shared KMP framework before handing off to Xcode
-      - name: Link shared Kotlin framework (iOS arm64)
-        run: ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-daemon
-
       # Mirror of the Flutter workflow's xcodebuild archive step
       - name: Archive iOS app (no codesign)
         working-directory: iosApp
@@ -107,7 +103,6 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES \
             archive \
             -archivePath "${{ runner.temp }}/Countdown.xcarchive"
 
