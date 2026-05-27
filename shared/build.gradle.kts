@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.io.File
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -137,7 +138,22 @@ sqldelight {
     databases {
         create("ExamDatabase") {
             packageName.set("com.exam.countdown.database")
+            srcDirs("src/nonWebMain/sqldelight")
         }
     }
     linkSqlite.set(false)
+}
+
+// SQLDelight generates code into build/generated/sqldelight/code/ExamDatabase/commonMain/
+// which would be compiled for ALL targets including wasmJs/js. Since SQLDelight 2.0.2
+// has no wasmJs/js runtime, we redirect the generated code to nonWebMain so only
+// Android, iOS, and JVM targets compile it.
+afterEvaluate {
+    val sqlDelightGenDir = layout.buildDirectory.dir(
+        "generated/sqldelight/code/ExamDatabase/commonMain"
+    )
+    kotlin.sourceSets.getByName("nonWebMain").kotlin.srcDir(sqlDelightGenDir)
+    kotlin.sourceSets.getByName("commonMain").kotlin {
+        setSrcDirs(srcDirs.filter { !it.path.contains("generated${File.separator}sqldelight") })
+    }
 }

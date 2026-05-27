@@ -1,27 +1,33 @@
-name: Build All Platforms
+name: Build All Platforms CC
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v1.0.0) — used to label artifacts'
+        required: false
+        default: ''
 
-# Cancel in-progress runs on the same branch
+# Cancel any in-progress run on the same branch when a new one starts
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  # Must be 21 — gradle/gradle-daemon-jvm.properties pins toolchainVersion=21
   JAVA_VERSION: '21'
   JAVA_DISTRIBUTION: 'temurin'
+  # Disable daemon (not useful on ephemeral CI runners), cap heap
   GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs="-Xmx4g"
 
 jobs:
-  # ──────────────────────────────────────────────────────────────────────
-  # Android – assembleDebug → APK
-  # ──────────────────────────────────────────────────────────────────────
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # ANDROID  →  debug APK
+  # ──────────────────────────────────────────────────────────────────────────
   android:
     name: 🤖 Android
     runs-on: ubuntu-latest
@@ -54,13 +60,14 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # ──────────────────────────────────────────────────────────────────────
-  # iOS – Build Kotlin framework + xcodebuild archive → unsigned IPA
-  # ──────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # iOS  →  unsigned IPA  (Flutter-style: archive → Payload zip)
+  # No signing secrets needed; sideload or re-sign locally
+  # ──────────────────────────────────────────────────────────────────────────
   ios:
     name: 🍎 iOS
     runs-on: macos-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -77,10 +84,19 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Kotlin Shared framework for iOS
+      - name: Cache Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: ${{ runner.os }}-konan-${{ hashFiles('**/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-konan-
+
+      # Build the shared KMP framework before handing off to Xcode
+      - name: Link shared Kotlin framework (iOS arm64)
         run: ./gradlew :shared:linkReleaseFrameworkIosArm64 --no-daemon
 
-      - name: Archive iOS app (unsigned)
+      # Mirror of the Flutter workflow's xcodebuild archive step
+      - name: Archive iOS app (no codesign)
         working-directory: iosApp
         run: |
           xcodebuild \
@@ -91,28 +107,32 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES \
             archive \
-            -archivePath "${{ runner.temp }}/Countdown.xcarchive" \
-            OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES
+            -archivePath "${{ runner.temp }}/Countdown.xcarchive"
 
+      # Mirror of the Flutter workflow's "Archive & export IPA" step
       - name: Create unsigned IPA
         run: |
+          VERSION="${{ inputs.version }}"
+          [ -z "$VERSION" ] && VERSION="${{ github.ref_name }}"
           mkdir -p Payload
           cp -r "${{ runner.temp }}/Countdown.xcarchive/Products/Applications/"*.app Payload/
-          zip -r Countdown-unsigned.ipa Payload
+          zip -qq -r "Countdown-unsigned-${VERSION}.ipa" Payload
+          rm -rf Payload
 
       - name: Upload IPA
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa
-          path: Countdown-unsigned.ipa
+          path: Countdown-unsigned-*.ipa
           if-no-files-found: warn
           retention-days: 7
 
-  # ──────────────────────────────────────────────────────────────────────
-  # Desktop (JVM) – native installer on each major OS
-  # ──────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # DESKTOP  →  .deb (Linux) + .msi (Windows) via matrix
+  # ──────────────────────────────────────────────────────────────────────────
   desktop:
     name: 🖥️ Desktop (${{ matrix.os-label }})
     runs-on: ${{ matrix.os }}
@@ -127,6 +147,7 @@ jobs:
             artifact-name: desktop-linux
             dist-task: packageDeb
             dist-path: desktopApp/build/compose/binaries/main/deb/*.deb
+
           - os: windows-latest
             os-label: Windows
             artifact-name: desktop-windows
@@ -161,9 +182,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # ──────────────────────────────────────────────────────────────────────
-  # Web (WasmJS + JS) – produces browser distributions
-  # ──────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # WEB  →  WasmJS + JS browser bundles
+  # ──────────────────────────────────────────────────────────────────────────
   web:
     name: 🌐 Web
     runs-on: ubuntu-latest
@@ -183,6 +204,13 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Kotlin/Wasm toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: ${{ runner.os }}-konan-${{ hashFiles('**/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-konan-
 
       - name: Build WasmJS browser distribution
         run: ./gradlew :webApp:wasmJsBrowserDistribution --no-daemon
@@ -207,4 +235,3 @@ jobs:
           path: webApp/build/dist/js/productionExecutable/
           if-no-files-found: warn
           retention-days: 7
-
