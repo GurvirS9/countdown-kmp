@@ -5,6 +5,8 @@ import com.exam.countdown.di.initKoin
 
 fun MainViewController() = ComposeUIViewController { App() }
 
-fun initKoinHelper() {
-    initKoin()
+object KoinHelper {
+    fun initKoin() {
+        com.exam.countdown.di.initKoin()
+    }
 }
