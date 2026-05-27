@@ -152,8 +152,21 @@ afterEvaluate {
     val sqlDelightGenDir = layout.buildDirectory.dir(
         "generated/sqldelight/code/ExamDatabase/commonMain"
     )
+    val generateDbTask = tasks.named("generateCommonMainExamDatabaseInterface")
+    
     kotlin.sourceSets.getByName("nonWebMain").kotlin.srcDir(sqlDelightGenDir)
     kotlin.sourceSets.getByName("commonMain").kotlin {
-        setSrcDirs(srcDirs.filter { !it.path.contains("generated${File.separator}sqldelight") })
+        // Exclude the SQLDelight generated directory from commonMain compilation
+        // without overriding the entire srcDirs collection (which breaks Compose Resources)
+        exclude { it.file.absolutePath.contains("generated${File.separator}sqldelight") }
+    }
+    
+    // Since we removed the generated directory from commonMain, Gradle loses the implicit
+    // task dependency. We must explicitly tell the Kotlin compilation tasks for non-web targets
+    // to wait for the SQLDelight code generation.
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+        if (!name.contains("WasmJs") && !name.contains("Js", ignoreCase = false)) {
+            dependsOn(generateDbTask)
+        }
     }
 }
